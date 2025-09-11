@@ -12,8 +12,7 @@ RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Указываем переменные окружения для токенов (можно переопределять при запуске)
-ENV API_TOKEN=""
-ENV OPENROUTER_API_KEY=""
 
 # Запуск бота
 CMD ["python", "maga_bot.py"]
+
