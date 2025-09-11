@@ -16,4 +16,4 @@ ENV API_TOKEN=""
 ENV OPENROUTER_API_KEY=""
 
 # Запуск бота
-CMD ["python", "bot.py"]
+CMD ["python", "maga_bot.py"]
