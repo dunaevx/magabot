@@ -5,6 +5,9 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
+print("API_TOKEN:", os.getenv('API_TOKEN'))
+print("OPENROUTER_API_KEY:", os.getenv('OPENROUTER_API_KEY'))
+
 API_TOKEN = os.getenv('API_TOKEN')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -132,3 +135,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
