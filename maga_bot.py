@@ -9,6 +9,7 @@ API_TOKEN = os.getenv('API_TOKEN')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+
 # Инициализация бота
 bot = Bot(
     token=API_TOKEN,
