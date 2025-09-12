@@ -5,55 +5,70 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 
-print("API_TOKEN:", os.getenv('API_TOKEN'))
-print("OPENROUTER_API_KEY:", os.getenv('OPENROUTER_API_KEY'))
-
 API_TOKEN = os.getenv('API_TOKEN')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# инициализация бота
+# Инициализация бота
 bot = Bot(
     token=API_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
 dp = Dispatcher()
 
-# история диалогов
-conversation_history = {}
+# Истории и замки
+conversation_history = {}  # {(chat_id, user_id): [...]}
+locks = {}  # {(chat_id, user_id): asyncio.Lock()}
+MAX_HISTORY = 15
 
-# ===== Обработка текстов =====
-@dp.message(F.text.regexp(r"(?i)^мага,"))
-async def handle_message(message: types.Message):
-    chat_id = message.chat.id
-    user_text = message.text[len("Мага,"):].strip()
+session: aiohttp.ClientSession = None  # будет создан при старте
 
-    if chat_id not in conversation_history:
-        conversation_history[chat_id] = [
+
+def get_lock(chat_id, user_id):
+    key = (chat_id, user_id)
+    if key not in locks:
+        locks[key] = asyncio.Lock()
+    return locks[key]
+
+
+def get_history(chat_id, user_id):
+    key = (chat_id, user_id)
+    if key not in conversation_history:
+        conversation_history[key] = [
             {
                 "role": "system",
                 "content": (
                     "Ты из Дагестана, тебя зовут Мага. "
                     "Отвечаешь коротко, резко, немного токсично, "
-                    "по существу и лаконично, с характерным кавказским стилем общения. "
-                    "Используешь простые слова и выражения, "
-                    "иногда добавляешь юмор и сарказм. "
-                    "Не используй сложные термины и длинные предложения. "
-                    "Всегда будь прямолинейным и честным в своих ответах."
+                    "по существу и лаконично, с кавказским стилем. "
+                    "Используешь простые слова, немного юмора и сарказма. "
+                    "Не используй сложные термины и длинные предложения."
                 ),
             }
         ]
+    return conversation_history[key]
 
-    conversation_history[chat_id].append({"role": "user", "content": user_text})
 
-    payload = {
-        "model": "openrouter/sonoma-sky-alpha",
-        "messages": conversation_history[chat_id],
-        "temperature": 0.9,
-    }
+# ===== Обработка текстов =====
+@dp.message(F.text.regexp(r"(?i)^мага,"))
+async def handle_message(message: types.Message):
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+    user_name = message.from_user.first_name
+    user_text = message.text[len("Мага,"):].strip()
 
-    try:
-        async with aiohttp.ClientSession() as session:
+    async with get_lock(chat_id, user_id):
+        history = get_history(chat_id, user_id)
+        history.append({"role": "user", "content": f"{user_name}: {user_text}"})
+        history[:] = history[-MAX_HISTORY:]
+
+        payload = {
+            "model": "openrouter/sonoma-sky-alpha",
+            "messages": history,
+            "temperature": 0.9,
+        }
+
+        try:
             async with session.post(
                 OPENROUTER_URL,
                 headers={
@@ -62,57 +77,50 @@ async def handle_message(message: types.Message):
                 },
                 json=payload
             ) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    await message.reply(f"Ошибка API: {resp.status}\n{text}")
+                    return
+
                 data = await resp.json()
                 answer = data.get("choices", [{}])[0].get("message", {}).get("content", "Я не понял ле, повтори")
                 await message.reply(answer)
-                conversation_history[chat_id].append({"role": "assistant", "content": answer})
-    except Exception as e:
-        await message.reply(f"Ошибка: {str(e)}")
+
+                history.append({"role": "assistant", "content": answer})
+                history[:] = history[-MAX_HISTORY:]
+
+        except Exception as e:
+            await message.reply(f"Ошибка: {str(e)}")
 
 
 # ===== Обработка фото =====
 @dp.message(F.photo)
 async def handle_photo(message: types.Message):
     chat_id = message.chat.id
+    user_id = message.from_user.id
+    user_name = message.from_user.first_name
 
-    # Берем фото максимального качества
-    photo = message.photo[-1]
-    file = await bot.get_file(photo.file_id)
-    file_url = f"https://api.telegram.org/file/bot{API_TOKEN}/{file.file_path}"
+    async with get_lock(chat_id, user_id):
+        photo = message.photo[-1]
+        file = await bot.get_file(photo.file_id)
+        file_url = f"https://api.telegram.org/file/bot{API_TOKEN}/{file.file_path}"
 
-    if chat_id not in conversation_history:
-        conversation_history[chat_id] = [
-            {
-                "role": "system",
-                "content": (
-                    "Ты из Дагестана, тебя зовут Мага. "
-                    "Отвечаешь коротко, по проще, по существу и лаконично, с характерным кавказским стилем общения. "
-                    "Используешь простые слова и выражения, иногда добавляешь юмор и сарказм. "
-                    "Не используй сложные термины и длинные предложения. "
-                    "Каждый раз формулируй ответ по-новому, избегай повторений и одинаковых выражений. "
-                    "Веди себя как реальный собеседник, а не как ИИ: не говори, что ты ИИ, не уточняй, что тебе нужно больше информации, не спрашивай, чего хотел пользователь, не добавляй фразы типа 'Что дальше?' или 'Что скажешь?'. "
-                    "Просто отвечай как человек, продолжая разговор естественно, без лишних уточняющих вопросов."
-                ),
+        history = get_history(chat_id, user_id)
+        history.append({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": f"{user_name} прислал фото:"},
+                {"type": "image_url", "image_url": {"url": file_url}}
+            ]
+        })
+        history[:] = history[-MAX_HISTORY:]
 
-            }
-        ]
+        payload = {
+            "model": "openrouter/sonoma-sky-alpha",
+            "messages": history
+        }
 
-    # Добавляем картинку в историю сообщений
-    conversation_history[chat_id].append({
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "Посмотри на фото:"},
-            {"type": "image_url", "image_url": {"url": file_url}}
-        ]
-    })
-
-    payload = {
-        "model": "openrouter/sonoma-sky-alpha",
-        "messages": conversation_history[chat_id]
-    }
-
-    try:
-        async with aiohttp.ClientSession() as session:
+        try:
             async with session.post(
                 OPENROUTER_URL,
                 headers={
@@ -121,18 +129,39 @@ async def handle_photo(message: types.Message):
                 },
                 json=payload
             ) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    await message.reply(f"Ошибка API: {resp.status}\n{text}")
+                    return
+
                 data = await resp.json()
                 answer = data.get("choices", [{}])[0].get("message", {}).get("content", "Нет ответа от ИИ.")
                 await message.reply(answer)
-                conversation_history[chat_id].append({"role": "assistant", "content": answer})
-    except Exception as e:
-        await message.reply(f"Ошибка: {str(e)}")
+
+                history.append({"role": "assistant", "content": answer})
+                history[:] = history[-MAX_HISTORY:]
+
+        except Exception as e:
+            await message.reply(f"Ошибка: {str(e)}")
+
+
+# ===== Запуск =====
+async def on_startup(bot):
+    global session
+    session = aiohttp.ClientSession()
+    print("Бот запущен...")
+
+
+async def on_shutdown(bot):
+    await session.close()
+    print("Бот остановлен.")
 
 
 async def main():
-    print("Бот запущен...")
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
-
