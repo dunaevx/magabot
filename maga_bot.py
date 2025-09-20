@@ -117,7 +117,7 @@ async def handle_photo(message: types.Message):
         history[:] = history[-MAX_HISTORY:]
 
         payload = {
-            "model": "openrouter/sonoma-sky-alpha",
+            "model": "x-ai/grok-4-fast:free",
             "messages": history
         }
 
