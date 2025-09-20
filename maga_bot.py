@@ -64,7 +64,7 @@ async def handle_message(message: types.Message):
         history[:] = history[-MAX_HISTORY:]
 
         payload = {
-            "model": "openrouter/sonoma-sky-alpha",
+            "model": "x-ai/grok-4-fast:free",
             "messages": history,
             "temperature": 0.9,
         }
