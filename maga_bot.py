@@ -9,20 +9,18 @@ API_TOKEN = os.getenv('API_TOKEN')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-
-# Инициализация бота
+# ====== Инициализация бота ======
 bot = Bot(
     token=API_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
 dp = Dispatcher()
 
-# Истории и замки
+# ====== История и блокировки ======
 conversation_history = {}  # {(chat_id, user_id): [...]}
 locks = {}  # {(chat_id, user_id): asyncio.Lock()}
 MAX_HISTORY = 15
-
-session: aiohttp.ClientSession = None  # будет создан при старте
+session: aiohttp.ClientSession = None
 
 
 def get_lock(chat_id, user_id):
@@ -43,14 +41,14 @@ def get_history(chat_id, user_id):
                     "Отвечаешь коротко, резко, немного токсично, "
                     "по существу и лаконично, с кавказским стилем. "
                     "Используешь простые слова, немного юмора и сарказма. "
-                    "Не используй сложные термины и длинные предложения."
+                    "Не используй сложные термины и длинные предложения. и БЕЗ МАТА! и без релегиазнонной тематики!"
                 ),
             }
         ]
     return conversation_history[key]
 
 
-# ===== Обработка текстов =====
+# ====== Обработка текстов ======
 @dp.message(F.text.regexp(r"(?i)^мага,"))
 async def handle_message(message: types.Message):
     chat_id = message.chat.id
@@ -60,11 +58,11 @@ async def handle_message(message: types.Message):
 
     async with get_lock(chat_id, user_id):
         history = get_history(chat_id, user_id)
-        history.append({"role": "user", "content": f"{user_name}: {user_text}"})
+        history.append({"role": "user", "content": f" {user_text}"})
         history[:] = history[-MAX_HISTORY:]
 
         payload = {
-            "model": "x-ai/grok-4-fast:free",
+            "model": "meituan/longcat-flash-chat:free",  # Модель
             "messages": history,
             "temperature": 0.9,
         }
@@ -74,7 +72,9 @@ async def handle_message(message: types.Message):
                 OPENROUTER_URL,
                 headers={
                     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://example.com",  # замените на ваш сайт/репо
+                    "X-Title": "MagaBot"
                 },
                 json=payload
             ) as resp:
@@ -84,7 +84,11 @@ async def handle_message(message: types.Message):
                     return
 
                 data = await resp.json()
-                answer = data.get("choices", [{}])[0].get("message", {}).get("content", "Я не понял ле, повтори")
+                answer = (
+                    data.get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content", "Я не понял ле, повтори")
+                )
                 await message.reply(answer)
 
                 history.append({"role": "assistant", "content": answer})
@@ -94,7 +98,7 @@ async def handle_message(message: types.Message):
             await message.reply(f"Ошибка: {str(e)}")
 
 
-# ===== Запуск =====
+# ====== Запуск ======
 async def on_startup(bot):
     global session
     session = aiohttp.ClientSession()
