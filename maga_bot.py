@@ -94,58 +94,6 @@ async def handle_message(message: types.Message):
             await message.reply(f"Ошибка: {str(e)}")
 
 
-# ===== Обработка фото =====
-@dp.message(F.photo)
-async def handle_photo(message: types.Message):
-    chat_id = message.chat.id
-    user_id = message.from_user.id
-    user_name = message.from_user.first_name
-
-    async with get_lock(chat_id, user_id):
-        photo = message.photo[-1]
-        file = await bot.get_file(photo.file_id)
-        file_url = f"https://api.telegram.org/file/bot{API_TOKEN}/{file.file_path}"
-
-        history = get_history(chat_id, user_id)
-        history.append({
-            "role": "user",
-            "content": [
-                {"type": "text", "text": f"{user_name} прислал фото:"},
-                {"type": "image_url", "image_url": {"url": file_url}}
-            ]
-        })
-        history[:] = history[-MAX_HISTORY:]
-
-        payload = {
-            "model": "x-ai/grok-4-fast:free",
-            "messages": history
-        }
-
-        try:
-            async with session.post(
-                OPENROUTER_URL,
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json=payload
-            ) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
-                    await message.reply(f"Ошибка API: {resp.status}\n{text}")
-                    return
-
-                data = await resp.json()
-                answer = data.get("choices", [{}])[0].get("message", {}).get("content", "Нет ответа от ИИ.")
-                await message.reply(answer)
-
-                history.append({"role": "assistant", "content": answer})
-                history[:] = history[-MAX_HISTORY:]
-
-        except Exception as e:
-            await message.reply(f"Ошибка: {str(e)}")
-
-
 # ===== Запуск =====
 async def on_startup(bot):
     global session
