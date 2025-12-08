@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # Бот: основной контейнер
+  bot:
+    build: .
+    container_name: maga_bot
+    restart: unless-stopped  # Перезапуск, если упадёт — как упрямый дагестанец
+    depends_on:
+      - db  # Ждёт БД, чтоб не ныть
+    environment:
+      - DB_HOST=db  # Хост БД внутри сети
+      - DB_PORT=5432
+      - DB_NAME=maga_bot_db
+      - DB_USER=postgres
+      - DB_PASS=your_db_pass_here  # Меняй в .env!
+    volumes:
+      - .:/app  # Для dev: hot-reload, но в проде удали
+    networks:
+      - maga_net
+
+  # PostgreSQL: отдельный сервис, чтоб БД не мучилась
+  db:
+    image: postgres:16-alpine  # Лёгкий, быстрый
+    container_name: maga_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: maga_bot_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: your_db_pass_here  # Синхронь с bot
+    ports:
+      - "5432:5432"  # Локальный доступ, если нужно
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # Персистентность: данные не слетят
+    networks:
+      - maga_net
+
+# Volumes: для БД, чтоб не потерять пользователей
+volumes:
+  postgres_data:
+
+# Сеть: изоляция, как забор в ауле
+networks:
+  maga_net:
+    driver: bridge
