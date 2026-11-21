@@ -1,18 +1,20 @@
-# Используем официальный Python 3.11
 FROM python:3.11-slim
 
-# Рабочая директория внутри контейнера
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
 WORKDIR /app
 
-# Копируем файлы проекта
-COPY . /app
-
-# Устанавливаем зависимости
-RUN pip install --no-cache-dir --upgrade pip
+# Сначала зависимости — так Docker кэширует слой и не переустанавливает их при каждом изменении кода
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Указываем переменные окружения для токенов (можно переопределять при запуске)
+COPY maga_bot.py .
 
-# Запуск бота
+# Не запускаем бота от root
+RUN useradd --create-home bot
+USER bot
+
+# Токены передаются при запуске:
+# docker run -e API_TOKEN=... -e OPENROUTER_API_KEY=... magabot
 CMD ["python", "maga_bot.py"]
-
